@@ -2,48 +2,56 @@
 pragma solidity ^0.8.0;
 
 /**
- * @title PointsJackpot
- * @dev A jackpot game using points instead of real funds
+ * @title SoloJackpot
+ * @dev A solo jackpot game where players spin to win multipliers using points
  */
-contract PointsJackpot {
+contract SoloJackpot {
     address public owner;
-    uint256 public gameId;
-    uint256 public entryFee;
-    uint256 public minPlayers;
+    uint256 public spinCost;
+    uint256 public jackpotPool;
+    uint256 public totalSpins;
     
-    struct Game {
-        uint256 id;
-        uint256 totalPoints;
-        uint256 playerCount;
-        address[] players;
-        mapping(address => uint256) entries;
-        address winner;
-        bool isActive;
-        bool isFinished;
+    struct SpinResult {
+        address player;
+        uint256 timestamp;
+        uint256 bet;
+        uint256 multiplier;
+        uint256 payout;
+        bool isJackpot;
     }
     
     mapping(address => uint256) public playerPoints;
-    mapping(uint256 => Game) public games;
+    mapping(address => uint256) public playerTotalWins;
+    mapping(address => uint256) public playerTotalSpins;
+    SpinResult[] public spinHistory;
+    
+    // Multiplier probabilities (out of 100)
+    // 0x: 60%, 1x: 20%, 2x: 10%, 5x: 7%, 10x: 2%, JACKPOT: 1%
     
     event PointsAwarded(address indexed player, uint256 amount);
-    event GameStarted(uint256 indexed gameId, uint256 entryFee);
-    event PlayerEntered(uint256 indexed gameId, address indexed player, uint256 points);
-    event WinnerSelected(uint256 indexed gameId, address indexed winner, uint256 prize);
+    event SpinCompleted(
+        address indexed player,
+        uint256 bet,
+        uint256 multiplier,
+        uint256 payout,
+        bool isJackpot
+    );
+    event JackpotWon(address indexed player, uint256 amount);
+    event JackpotIncreased(uint256 newAmount);
     
     modifier onlyOwner() {
         require(msg.sender == owner, "Only owner can call this");
         _;
     }
     
-    constructor(uint256 _entryFee, uint256 _minPlayers) {
+    constructor(uint256 _spinCost) {
         owner = msg.sender;
-        entryFee = _entryFee;
-        minPlayers = _minPlayers;
-        gameId = 0;
+        spinCost = _spinCost;
+        jackpotPool = 10000; // Starting jackpot
     }
     
     /**
-     * @dev Award points to a player (owner only, simulates earning points)
+     * @dev Award points to a player
      */
     function awardPoints(address player, uint256 amount) external onlyOwner {
         playerPoints[player] += amount;
@@ -51,69 +59,173 @@ contract PointsJackpot {
     }
     
     /**
-     * @dev Start a new game
+     * @dev Add points to jackpot pool
      */
-    function startNewGame() external onlyOwner {
-        require(!games[gameId].isActive, "Current game is still active");
-        
-        gameId++;
-        Game storage newGame = games[gameId];
-        newGame.id = gameId;
-        newGame.isActive = true;
-        newGame.isFinished = false;
-        
-        emit GameStarted(gameId, entryFee);
+    function addToJackpot(uint256 amount) external onlyOwner {
+        jackpotPool += amount;
+        emit JackpotIncreased(jackpotPool);
     }
     
     /**
-     * @dev Enter the current game
+     * @dev Spin the jackpot wheel
      */
-    function enterGame() external {
-        Game storage currentGame = games[gameId];
+    function spin() external returns (uint256 multiplier, uint256 payout) {
+        require(playerPoints[msg.sender] >= spinCost, "Insufficient points");
         
-        require(currentGame.isActive, "No active game");
-        require(!currentGame.isFinished, "Game already finished");
-        require(playerPoints[msg.sender] >= entryFee, "Insufficient points");
-        require(currentGame.entries[msg.sender] == 0, "Already entered");
+        // Deduct spin cost
+        playerPoints[msg.sender] -= spinCost;
         
-        // Deduct entry fee from player
-        playerPoints[msg.sender] -= entryFee;
+        // 10% of spin cost goes to jackpot pool
+        uint256 jackpotContribution = spinCost / 10;
+        jackpotPool += jackpotContribution;
         
-        // Add to game
-        currentGame.entries[msg.sender] = entryFee;
-        currentGame.players.push(msg.sender);
-        currentGame.totalPoints += entryFee;
-        currentGame.playerCount++;
-        
-        emit PlayerEntered(gameId, msg.sender, entryFee);
-    }
-    
-    /**
-     * @dev Draw winner (owner only, requires minimum players)
-     */
-    function drawWinner() external onlyOwner {
-        Game storage currentGame = games[gameId];
-        
-        require(currentGame.isActive, "No active game");
-        require(!currentGame.isFinished, "Game already finished");
-        require(currentGame.playerCount >= minPlayers, "Not enough players");
-        
-        // Simple pseudo-random selection (NOT secure for real funds!)
-        uint256 randomIndex = uint256(keccak256(abi.encodePacked(
+        // Generate pseudo-random number (0-99)
+        uint256 random = uint256(keccak256(abi.encodePacked(
             block.timestamp,
             block.prevrandao,
-            currentGame.playerCount
-        ))) % currentGame.playerCount;
+            msg.sender,
+            totalSpins
+        ))) % 100;
         
-        address winner = currentGame.players[randomIndex];
-        currentGame.winner = winner;
-        currentGame.isFinished = true;
-        currentGame.isActive = false;
+        bool isJackpot = false;
         
-        // Award prize to winner
-        playerPoints[winner] += currentGame.totalPoints;
+        // Determine multiplier based on probability
+        if (random == 0) {
+            // 1% chance - JACKPOT!
+            multiplier = 0;
+            payout = jackpotPool;
+            isJackpot = true;
+            jackpotPool = 1000; // Reset jackpot to base amount
+            emit JackpotWon(msg.sender, payout);
+        } else if (random <= 2) {
+            // 2% chance - 10x
+            multiplier = 10;
+            payout = spinCost * multiplier;
+        } else if (random <= 9) {
+            // 7% chance - 5x
+            multiplier = 5;
+            payout = spinCost * multiplier;
+        } else if (random <= 19) {
+            // 10% chance - 2x
+            multiplier = 2;
+            payout = spinCost * multiplier;
+        } else if (random <= 39) {
+            // 20% chance - 1x (break even)
+            multiplier = 1;
+            payout = spinCost;
+        } else {
+            // 60% chance - 0x (lose)
+            multiplier = 0;
+            payout = 0;
+        }
         
-        emit WinnerSelected(gameId, winner, currentGame.totalPoints);
+        // Award payout
+        if (payout > 0) {
+            playerPoints[msg.sender] += payout;
+            playerTotalWins[msg.sender] += payout;
+        }
+        
+        // Update stats
+        totalSpins++;
+        playerTotalSpins[msg.sender]++;
+        
+        // Record spin
+        spinHistory.push(SpinResult({
+            player: msg.sender,
+            timestamp: block.timestamp,
+            bet: spinCost,
+            multiplier: isJackpot ? 0 : multiplier,
+            payout: payout,
+            isJackpot: isJackpot
+        }));
+        
+        emit SpinCompleted(msg.sender, spinCost, multiplier, payout, isJackpot);
+        
+        return (multiplier, payout);
+    }
+    
+    /**
+     * @dev Get player statistics
+     */
+    function getPlayerStats(address player) external view returns (
+        uint256 points,
+        uint256 spins,
+        uint256 totalWins
+    ) {
+        return (
+            playerPoints[player],
+            playerTotalSpins[player],
+            playerTotalWins[player]
+        );
+    }
+    
+    /**
+     * @dev Get recent spin history (last n spins)
+     */
+    function getRecentSpins(uint256 count) external view returns (SpinResult[] memory) {
+        uint256 length = spinHistory.length;
+        if (count > length) {
+            count = length;
+        }
+        
+        SpinResult[] memory recent = new SpinResult[](count);
+        for (uint256 i = 0; i < count; i++) {
+            recent[i] = spinHistory[length - count + i];
+        }
+        
+        return recent;
+    }
+    
+    /**
+     * @dev Get player's spin history
+     */
+    function getPlayerSpinHistory(address player, uint256 count) external view returns (SpinResult[] memory) {
+        // Count player's spins
+        uint256 playerSpinCount = 0;
+        for (uint256 i = 0; i < spinHistory.length; i++) {
+            if (spinHistory[i].player == player) {
+                playerSpinCount++;
+            }
+        }
+        
+        // Limit to requested count
+        if (count > playerSpinCount) {
+            count = playerSpinCount;
+        }
+        
+        // Get last n player spins
+        SpinResult[] memory playerSpins = new SpinResult[](count);
+        uint256 found = 0;
+        
+        for (uint256 i = spinHistory.length; i > 0 && found < count; i--) {
+            if (spinHistory[i - 1].player == player) {
+                playerSpins[count - found - 1] = spinHistory[i - 1];
+                found++;
+            }
+        }
+        
+        return playerSpins;
+    }
+    
+    /**
+     * @dev Get current jackpot amount
+     */
+    function getCurrentJackpot() external view returns (uint256) {
+        return jackpotPool;
+    }
+    
+    /**
+     * @dev Update spin cost (owner only)
+     */
+    function setSpinCost(uint256 _newCost) external onlyOwner {
+        spinCost = _newCost;
+    }
+    
+    /**
+     * @dev Get total number of spins
+     */
+    function getTotalSpins() external view returns (uint256) {
+        return totalSpins;
     }
     
     /**
@@ -121,53 +233,5 @@ contract PointsJackpot {
      */
     function getPlayerPoints(address player) external view returns (uint256) {
         return playerPoints[player];
-    }
-    
-    /**
-     * @dev Get current game info
-     */
-    function getCurrentGameInfo() external view returns (
-        uint256 id,
-        uint256 totalPoints,
-        uint256 playerCount,
-        bool isActive,
-        bool isFinished
-    ) {
-        Game storage currentGame = games[gameId];
-        return (
-            currentGame.id,
-            currentGame.totalPoints,
-            currentGame.playerCount,
-            currentGame.isActive,
-            currentGame.isFinished
-        );
-    }
-    
-    /**
-     * @dev Get players in current game
-     */
-    function getCurrentPlayers() external view returns (address[] memory) {
-        return games[gameId].players;
-    }
-    
-    /**
-     * @dev Get game winner
-     */
-    function getGameWinner(uint256 _gameId) external view returns (address) {
-        return games[_gameId].winner;
-    }
-    
-    /**
-     * @dev Update entry fee (owner only)
-     */
-    function setEntryFee(uint256 _newFee) external onlyOwner {
-        entryFee = _newFee;
-    }
-    
-    /**
-     * @dev Update minimum players (owner only)
-     */
-    function setMinPlayers(uint256 _minPlayers) external onlyOwner {
-        minPlayers = _minPlayers;
     }
 }
