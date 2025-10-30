@@ -2,236 +2,182 @@
 pragma solidity ^0.8.0;
 
 /**
- * @title SoloJackpot
- * @dev A solo jackpot game where players spin to win multipliers using points
+ * @title FunJackpot
+ * @dev A fun solo jackpot game with fake rewards - no real money involved!
  */
-contract SoloJackpot {
-    address public owner;
-    uint256 public spinCost;
-    uint256 public jackpotPool;
-    uint256 public totalSpins;
+contract FunJackpot {
     
-    struct SpinResult {
-        address player;
-        uint256 timestamp;
-        uint256 bet;
-        uint256 multiplier;
-        uint256 payout;
-        bool isJackpot;
+    struct Player {
+        uint256 spins;
+        uint256 biggestWin;
+        uint256 totalWinnings;
+        uint256 lastSpinTime;
+        string lastResult;
     }
     
-    mapping(address => uint256) public playerPoints;
-    mapping(address => uint256) public playerTotalWins;
-    mapping(address => uint256) public playerTotalSpins;
-    SpinResult[] public spinHistory;
+    mapping(address => Player) public players;
     
-    // Multiplier probabilities (out of 100)
-    // 0x: 60%, 1x: 20%, 2x: 10%, 5x: 7%, 10x: 2%, JACKPOT: 1%
+    string[] private outcomes = [
+        "🍒 Cherry",
+        "🍋 Lemon", 
+        "🍊 Orange",
+        "🍇 Grape",
+        "🔔 Bell",
+        "⭐ Star",
+        "💎 Diamond",
+        "🎰 JACKPOT"
+    ];
     
-    event PointsAwarded(address indexed player, uint256 amount);
-    event SpinCompleted(
+    event SpinResult(
         address indexed player,
-        uint256 bet,
-        uint256 multiplier,
-        uint256 payout,
-        bool isJackpot
+        string symbol1,
+        string symbol2,
+        string symbol3,
+        string result,
+        uint256 fakeReward
     );
-    event JackpotWon(address indexed player, uint256 amount);
-    event JackpotIncreased(uint256 newAmount);
     
-    modifier onlyOwner() {
-        require(msg.sender == owner, "Only owner can call this");
-        _;
-    }
-    
-    constructor(uint256 _spinCost) {
-        owner = msg.sender;
-        spinCost = _spinCost;
-        jackpotPool = 10000; // Starting jackpot
-    }
+    event NewHighScore(address indexed player, uint256 biggestWin);
     
     /**
-     * @dev Award points to a player
+     * @dev Spin the jackpot reels!
      */
-    function awardPoints(address player, uint256 amount) external onlyOwner {
-        playerPoints[player] += amount;
-        emit PointsAwarded(player, amount);
-    }
-    
-    /**
-     * @dev Add points to jackpot pool
-     */
-    function addToJackpot(uint256 amount) external onlyOwner {
-        jackpotPool += amount;
-        emit JackpotIncreased(jackpotPool);
-    }
-    
-    /**
-     * @dev Spin the jackpot wheel
-     */
-    function spin() external returns (uint256 multiplier, uint256 payout) {
-        require(playerPoints[msg.sender] >= spinCost, "Insufficient points");
+    function spin() external returns (
+        string memory symbol1,
+        string memory symbol2,
+        string memory symbol3,
+        string memory result,
+        uint256 fakeReward
+    ) {
+        Player storage player = players[msg.sender];
         
-        // Deduct spin cost
-        playerPoints[msg.sender] -= spinCost;
+        // Generate three random symbols
+        uint256 random1 = _random(0) % outcomes.length;
+        uint256 random2 = _random(1) % outcomes.length;
+        uint256 random3 = _random(2) % outcomes.length;
         
-        // 10% of spin cost goes to jackpot pool
-        uint256 jackpotContribution = spinCost / 10;
-        jackpotPool += jackpotContribution;
+        symbol1 = outcomes[random1];
+        symbol2 = outcomes[random2];
+        symbol3 = outcomes[random3];
         
-        // Generate pseudo-random number (0-99)
-        uint256 random = uint256(keccak256(abi.encodePacked(
-            block.timestamp,
-            block.prevrandao,
-            msg.sender,
-            totalSpins
-        ))) % 100;
-        
-        bool isJackpot = false;
-        
-        // Determine multiplier based on probability
-        if (random == 0) {
-            // 1% chance - JACKPOT!
-            multiplier = 0;
-            payout = jackpotPool;
-            isJackpot = true;
-            jackpotPool = 1000; // Reset jackpot to base amount
-            emit JackpotWon(msg.sender, payout);
-        } else if (random <= 2) {
-            // 2% chance - 10x
-            multiplier = 10;
-            payout = spinCost * multiplier;
-        } else if (random <= 9) {
-            // 7% chance - 5x
-            multiplier = 5;
-            payout = spinCost * multiplier;
-        } else if (random <= 19) {
-            // 10% chance - 2x
-            multiplier = 2;
-            payout = spinCost * multiplier;
-        } else if (random <= 39) {
-            // 20% chance - 1x (break even)
-            multiplier = 1;
-            payout = spinCost;
+        // Determine result and fake reward
+        if (random1 == random2 && random2 == random3) {
+            // Three matching symbols!
+            if (random1 == 7) {
+                // Triple JACKPOT
+                result = "🎉 MEGA JACKPOT! 🎉";
+                fakeReward = 1000000;
+            } else if (random1 == 6) {
+                // Triple Diamond
+                result = "💎 DIAMOND JACKPOT! 💎";
+                fakeReward = 500000;
+            } else if (random1 >= 4) {
+                // Triple Star or Bell
+                result = "⭐ BIG WIN! ⭐";
+                fakeReward = 100000;
+            } else {
+                // Triple fruit
+                result = "🎊 NICE WIN! 🎊";
+                fakeReward = 50000;
+            }
+        } else if (random1 == random2 || random2 == random3 || random1 == random3) {
+            // Two matching symbols
+            result = "✨ Small Win! ✨";
+            fakeReward = 10000;
         } else {
-            // 60% chance - 0x (lose)
-            multiplier = 0;
-            payout = 0;
+            // No match
+            result = "Try Again!";
+            fakeReward = 0;
         }
         
-        // Award payout
-        if (payout > 0) {
-            playerPoints[msg.sender] += payout;
-            playerTotalWins[msg.sender] += payout;
+        // Update player stats
+        player.spins++;
+        player.lastSpinTime = block.timestamp;
+        player.lastResult = result;
+        
+        if (fakeReward > 0) {
+            player.totalWinnings += fakeReward;
+            
+            if (fakeReward > player.biggestWin) {
+                player.biggestWin = fakeReward;
+                emit NewHighScore(msg.sender, fakeReward);
+            }
         }
         
-        // Update stats
-        totalSpins++;
-        playerTotalSpins[msg.sender]++;
+        emit SpinResult(msg.sender, symbol1, symbol2, symbol3, result, fakeReward);
         
-        // Record spin
-        spinHistory.push(SpinResult({
-            player: msg.sender,
-            timestamp: block.timestamp,
-            bet: spinCost,
-            multiplier: isJackpot ? 0 : multiplier,
-            payout: payout,
-            isJackpot: isJackpot
-        }));
-        
-        emit SpinCompleted(msg.sender, spinCost, multiplier, payout, isJackpot);
-        
-        return (multiplier, payout);
+        return (symbol1, symbol2, symbol3, result, fakeReward);
     }
     
     /**
      * @dev Get player statistics
      */
-    function getPlayerStats(address player) external view returns (
-        uint256 points,
-        uint256 spins,
-        uint256 totalWins
+    function getMyStats() external view returns (
+        uint256 totalSpins,
+        uint256 biggestWin,
+        uint256 totalWinnings,
+        string memory lastResult
     ) {
+        Player memory player = players[msg.sender];
         return (
-            playerPoints[player],
-            playerTotalSpins[player],
-            playerTotalWins[player]
+            player.spins,
+            player.biggestWin,
+            player.totalWinnings,
+            player.lastResult
         );
     }
     
     /**
-     * @dev Get recent spin history (last n spins)
+     * @dev Get leaderboard (top 10 players by biggest win)
+     * Note: This is a simple implementation. For production, use off-chain indexing.
      */
-    function getRecentSpins(uint256 count) external view returns (SpinResult[] memory) {
-        uint256 length = spinHistory.length;
-        if (count > length) {
-            count = length;
-        }
-        
-        SpinResult[] memory recent = new SpinResult[](count);
-        for (uint256 i = 0; i < count; i++) {
-            recent[i] = spinHistory[length - count + i];
-        }
-        
-        return recent;
+    function getPlayerInfo(address playerAddress) external view returns (
+        uint256 totalSpins,
+        uint256 biggestWin,
+        uint256 totalWinnings
+    ) {
+        Player memory player = players[playerAddress];
+        return (
+            player.spins,
+            player.biggestWin,
+            player.totalWinnings
+        );
     }
     
     /**
-     * @dev Get player's spin history
+     * @dev Check if player has played before
      */
-    function getPlayerSpinHistory(address player, uint256 count) external view returns (SpinResult[] memory) {
-        // Count player's spins
-        uint256 playerSpinCount = 0;
-        for (uint256 i = 0; i < spinHistory.length; i++) {
-            if (spinHistory[i].player == player) {
-                playerSpinCount++;
-            }
+    function hasPlayed(address playerAddress) external view returns (bool) {
+        return players[playerAddress].spins > 0;
+    }
+    
+    /**
+     * @dev Get time since last spin
+     */
+    function getTimeSinceLastSpin() external view returns (uint256) {
+        if (players[msg.sender].lastSpinTime == 0) {
+            return 0;
         }
-        
-        // Limit to requested count
-        if (count > playerSpinCount) {
-            count = playerSpinCount;
-        }
-        
-        // Get last n player spins
-        SpinResult[] memory playerSpins = new SpinResult[](count);
-        uint256 found = 0;
-        
-        for (uint256 i = spinHistory.length; i > 0 && found < count; i--) {
-            if (spinHistory[i - 1].player == player) {
-                playerSpins[count - found - 1] = spinHistory[i - 1];
-                found++;
-            }
-        }
-        
-        return playerSpins;
+        return block.timestamp - players[msg.sender].lastSpinTime;
     }
     
     /**
-     * @dev Get current jackpot amount
+     * @dev Internal random number generator
      */
-    function getCurrentJackpot() external view returns (uint256) {
-        return jackpotPool;
+    function _random(uint256 seed) private view returns (uint256) {
+        return uint256(keccak256(abi.encodePacked(
+            block.timestamp,
+            block.prevrandao,
+            msg.sender,
+            seed,
+            players[msg.sender].spins
+        )));
     }
     
     /**
-     * @dev Update spin cost (owner only)
+     * @dev Get all possible outcomes
      */
-    function setSpinCost(uint256 _newCost) external onlyOwner {
-        spinCost = _newCost;
-    }
-    
-    /**
-     * @dev Get total number of spins
-     */
-    function getTotalSpins() external view returns (uint256) {
-        return totalSpins;
-    }
-    
-    /**
-     * @dev Get player's current points
-     */
-    function getPlayerPoints(address player) external view returns (uint256) {
-        return playerPoints[player];
+    function getOutcomes() external view returns (string[] memory) {
+        return outcomes;
     }
 }
