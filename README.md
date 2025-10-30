@@ -1,5 +1,7 @@
 # Celo---Jackpot-game
 
+Celo contrat : 0x697a110e4204581C27a45A3ea7A3D72A7F5b668a
+
 Game Mechanics:
 Spin Outcomes (probability based):
 
