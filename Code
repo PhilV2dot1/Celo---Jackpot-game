@@ -1,0 +1,173 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+/**
+ * @title PointsJackpot
+ * @dev A jackpot game using points instead of real funds
+ */
+contract PointsJackpot {
+    address public owner;
+    uint256 public gameId;
+    uint256 public entryFee;
+    uint256 public minPlayers;
+    
+    struct Game {
+        uint256 id;
+        uint256 totalPoints;
+        uint256 playerCount;
+        address[] players;
+        mapping(address => uint256) entries;
+        address winner;
+        bool isActive;
+        bool isFinished;
+    }
+    
+    mapping(address => uint256) public playerPoints;
+    mapping(uint256 => Game) public games;
+    
+    event PointsAwarded(address indexed player, uint256 amount);
+    event GameStarted(uint256 indexed gameId, uint256 entryFee);
+    event PlayerEntered(uint256 indexed gameId, address indexed player, uint256 points);
+    event WinnerSelected(uint256 indexed gameId, address indexed winner, uint256 prize);
+    
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Only owner can call this");
+        _;
+    }
+    
+    constructor(uint256 _entryFee, uint256 _minPlayers) {
+        owner = msg.sender;
+        entryFee = _entryFee;
+        minPlayers = _minPlayers;
+        gameId = 0;
+    }
+    
+    /**
+     * @dev Award points to a player (owner only, simulates earning points)
+     */
+    function awardPoints(address player, uint256 amount) external onlyOwner {
+        playerPoints[player] += amount;
+        emit PointsAwarded(player, amount);
+    }
+    
+    /**
+     * @dev Start a new game
+     */
+    function startNewGame() external onlyOwner {
+        require(!games[gameId].isActive, "Current game is still active");
+        
+        gameId++;
+        Game storage newGame = games[gameId];
+        newGame.id = gameId;
+        newGame.isActive = true;
+        newGame.isFinished = false;
+        
+        emit GameStarted(gameId, entryFee);
+    }
+    
+    /**
+     * @dev Enter the current game
+     */
+    function enterGame() external {
+        Game storage currentGame = games[gameId];
+        
+        require(currentGame.isActive, "No active game");
+        require(!currentGame.isFinished, "Game already finished");
+        require(playerPoints[msg.sender] >= entryFee, "Insufficient points");
+        require(currentGame.entries[msg.sender] == 0, "Already entered");
+        
+        // Deduct entry fee from player
+        playerPoints[msg.sender] -= entryFee;
+        
+        // Add to game
+        currentGame.entries[msg.sender] = entryFee;
+        currentGame.players.push(msg.sender);
+        currentGame.totalPoints += entryFee;
+        currentGame.playerCount++;
+        
+        emit PlayerEntered(gameId, msg.sender, entryFee);
+    }
+    
+    /**
+     * @dev Draw winner (owner only, requires minimum players)
+     */
+    function drawWinner() external onlyOwner {
+        Game storage currentGame = games[gameId];
+        
+        require(currentGame.isActive, "No active game");
+        require(!currentGame.isFinished, "Game already finished");
+        require(currentGame.playerCount >= minPlayers, "Not enough players");
+        
+        // Simple pseudo-random selection (NOT secure for real funds!)
+        uint256 randomIndex = uint256(keccak256(abi.encodePacked(
+            block.timestamp,
+            block.prevrandao,
+            currentGame.playerCount
+        ))) % currentGame.playerCount;
+        
+        address winner = currentGame.players[randomIndex];
+        currentGame.winner = winner;
+        currentGame.isFinished = true;
+        currentGame.isActive = false;
+        
+        // Award prize to winner
+        playerPoints[winner] += currentGame.totalPoints;
+        
+        emit WinnerSelected(gameId, winner, currentGame.totalPoints);
+    }
+    
+    /**
+     * @dev Get player's current points
+     */
+    function getPlayerPoints(address player) external view returns (uint256) {
+        return playerPoints[player];
+    }
+    
+    /**
+     * @dev Get current game info
+     */
+    function getCurrentGameInfo() external view returns (
+        uint256 id,
+        uint256 totalPoints,
+        uint256 playerCount,
+        bool isActive,
+        bool isFinished
+    ) {
+        Game storage currentGame = games[gameId];
+        return (
+            currentGame.id,
+            currentGame.totalPoints,
+            currentGame.playerCount,
+            currentGame.isActive,
+            currentGame.isFinished
+        );
+    }
+    
+    /**
+     * @dev Get players in current game
+     */
+    function getCurrentPlayers() external view returns (address[] memory) {
+        return games[gameId].players;
+    }
+    
+    /**
+     * @dev Get game winner
+     */
+    function getGameWinner(uint256 _gameId) external view returns (address) {
+        return games[_gameId].winner;
+    }
+    
+    /**
+     * @dev Update entry fee (owner only)
+     */
+    function setEntryFee(uint256 _newFee) external onlyOwner {
+        entryFee = _newFee;
+    }
+    
+    /**
+     * @dev Update minimum players (owner only)
+     */
+    function setMinPlayers(uint256 _minPlayers) external onlyOwner {
+        minPlayers = _minPlayers;
+    }
+}
