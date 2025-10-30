@@ -1,33 +1,29 @@
 # Celo---Jackpot-game
 
+Game Mechanics:
+Spin Outcomes (probability based):
+
+🎰 JACKPOT (1%) - Win the entire jackpot pool!
+🔟 10x (2%) - Win 10 times your bet
+5️⃣ 5x (7%) - Win 5 times your bet
+2️⃣ 2x (10%) - Win double your bet
+1️⃣ 1x (20%) - Break even (get bet back)
+❌ 0x (60%) - Lose your bet
+
 Key Features:
 
-Points System: Players earn and spend points instead of cryptocurrency
-Game Lifecycle:
-
-Owner starts a new game
-Players enter by spending points (entry fee)
-Owner draws a winner when minimum players are reached
-Winner receives all accumulated points
-
+Solo Play: Each player spins independently
+Growing Jackpot: 10% of each spin cost feeds the jackpot pool
+Statistics Tracking: Tracks total wins, spins, and points per player
+Spin History: Records all spins with timestamps and results
 
 Main Functions:
 
-awardPoints() - Owner gives points to players
-startNewGame() - Begins a new jackpot round
-enterGame() - Players join with their points
-drawWinner() - Randomly selects a winner
-Various view functions to check game status and player points
+spin() - Play the game (costs points)
+awardPoints() - Owner gives players points
+getPlayerStats() - View your performance
+getRecentSpins() - See recent game activity
+getCurrentJackpot() - Check jackpot size
+getPlayerSpinHistory() - View your past spins
 
-
-Safety Features:
-
-Only owner can start games and award points
-Players can only enter once per game
-Minimum player requirement before drawing winner
-Prevents entering finished or inactive games
-
-
-
-Note: The random number generation uses block data (timestamp, prevrandao) which is fine for a points-based game, but would NOT be secure for real funds as it could be manipulated by miners/validators.
-The contract is completely fund-free - no ETH or tokens are handled, only internal point tracking!RetryClaude can make mistakes. Please double-check responses.
+The contract is completely fund-free and uses a simple probability system for outcomes. Players can spin as many times as they have points!RetryClaude can make mistakes. Please double-check responses. Sonnet 4.5
