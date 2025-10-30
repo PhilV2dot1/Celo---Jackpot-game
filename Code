@@ -18,14 +18,14 @@ contract FunJackpot {
     mapping(address => Player) public players;
     
     string[] private outcomes = [
-        "🍒 Cherry",
-        "🍋 Lemon", 
-        "🍊 Orange",
-        "🍇 Grape",
-        "🔔 Bell",
-        "⭐ Star",
-        "💎 Diamond",
-        "🎰 JACKPOT"
+    unicode"🍒 Cherry",
+    unicode"🍋 Lemon",
+    unicode"🍊 Orange",
+    unicode"🍇 Grape",
+    unicode"🔔 Bell",
+    unicode"⭐ Star",
+    unicode"💎 Diamond",
+    unicode"🎰 JACKPOT"
     ];
     
     event SpinResult(
@@ -60,35 +60,27 @@ contract FunJackpot {
         symbol2 = outcomes[random2];
         symbol3 = outcomes[random3];
         
-        // Determine result and fake reward
-        if (random1 == random2 && random2 == random3) {
-            // Three matching symbols!
-            if (random1 == 7) {
-                // Triple JACKPOT
-                result = "🎉 MEGA JACKPOT! 🎉";
-                fakeReward = 1000000;
-            } else if (random1 == 6) {
-                // Triple Diamond
-                result = "💎 DIAMOND JACKPOT! 💎";
-                fakeReward = 500000;
-            } else if (random1 >= 4) {
-                // Triple Star or Bell
-                result = "⭐ BIG WIN! ⭐";
-                fakeReward = 100000;
-            } else {
-                // Triple fruit
-                result = "🎊 NICE WIN! 🎊";
-                fakeReward = 50000;
-            }
-        } else if (random1 == random2 || random2 == random3 || random1 == random3) {
-            // Two matching symbols
-            result = "✨ Small Win! ✨";
-            fakeReward = 10000;
+     if (random1 == random2 && random2 == random3) {
+        if (random1 == 7) {
+            result = unicode"MEGA JACKPOT! 🎰";  // ✅ Fixed
+            fakeReward = 1000000;
+        } else if (random1 == 6) {
+            result = unicode"💎 DIAMOND JACKPOT! 💎";  // ✅ Fixed
+            fakeReward = 500000;
+        } else if (random1 >= 4) {
+            result = unicode"⭐ BIG WIN! ⭐";  // ✅ Fixed
+            fakeReward = 100000;
         } else {
-            // No match
-            result = "Try Again!";
-            fakeReward = 0;
+            result = unicode"🎊 NICE WIN! 🎊";  // ✅ Fixed
+            fakeReward = 50000;
         }
+    } else if (random1 == random2 || random2 == random3 || random1 == random3) {
+        result = unicode"✨ Small Win! ✨";  // ✅ Fixed
+        fakeReward = 10000;
+    } else {
+        result = "Try Again!";  // ✅ No emojis → no `unicode` needed
+        fakeReward = 0;
+    }
         
         // Update player stats
         player.spins++;
